@@ -1,0 +1,12 @@
+// Auto-generated from origin with SHA256 6a4d3a714bf5c50d74a5463e0995c9645114a92b6be00267aa7a44ffa59fa574.
+pub const STATUS_SEVERITY_INFORMATIONAL: u32 = 0x1;
+pub const STATUS_SEVERITY_WARNING: u32 = 0x2;
+pub const STATUS_SEVERITY_ERROR: u32 = 0x3;
+pub const NETWORK_CATEGORY: u16 = 0x00000001;
+pub const DATABASE_CATEGORY: u16 = 0x00000002;
+pub const UI_CATEGORY: u16 = 0x00000003;
+pub const MSG_ERROR: u32 = 0xC0000100;
+pub const MSG_WARNING: u32 = 0x80000101;
+pub const MSG_INFO: u32 = 0x40000102;
+pub const MSG_DEBUG: u32 = 0x40000103;
+pub const MSG_TRACE: u32 = 0x40000104;
