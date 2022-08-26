@@ -25,3 +25,5 @@ Cargo.lock
 /res/*.bin
 /res/*.h
 /res/*.rc
+
+.vscode

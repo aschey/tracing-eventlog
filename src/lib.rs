@@ -1,11 +1,13 @@
-use core::fmt;
-use std::{
-    ffi::{OsStr, OsString},
-    ptr::null_mut,
-};
-
 use registry::{Data, Hive, Security};
-use tracing_core::{field, Event};
+use std::io;
+use std::sync::Arc;
+use std::{ffi::OsStr, ptr::null_mut, sync::Mutex};
+use tracing::{span, Metadata, Subscriber};
+use tracing_core::Event;
+use tracing_subscriber::fmt::format::Format;
+use tracing_subscriber::fmt::{format, FormatEvent, FormatFields, Layer, MakeWriter};
+use tracing_subscriber::layer::Context;
+use tracing_subscriber::registry::LookupSpan;
 use widestring::WideCString;
 use windows::{
     core::PCWSTR,
@@ -17,70 +19,90 @@ use windows::{
 
 pub mod eventmsgs;
 
-pub struct EventLogSubscriber {
+pub struct EventLogLayer<S, N, L>
+where
+    S: Subscriber + for<'span> LookupSpan<'span>,
+    N: for<'writer> FormatFields<'writer> + 'static,
+{
     _source: WideCString,
     event_source_handle: EventSourceHandle,
+    data: Arc<Mutex<Vec<u8>>>,
+    inner: Layer<S, N, format::Format<L, ()>, MemWriter>,
 }
 
-impl EventLogSubscriber {
-    pub fn new(source: impl Into<OsString>) -> Self {
+impl<S, N, L> EventLogLayer<S, N, L>
+where
+    S: Subscriber + for<'span> LookupSpan<'span>,
+    N: for<'writer> FormatFields<'writer> + 'static,
+{
+    pub fn new<M>(source: impl Into<String>, inner: Layer<S, N, format::Format<L, M>>) -> Self {
         let source = WideCString::from_os_str(source.into()).unwrap();
 
         let event_source_handle = unsafe {
             EventLog::RegisterEventSourceW(PCWSTR::null(), PCWSTR::from_raw(source.as_ptr()))
                 .unwrap()
         };
+        let data = Arc::new(Mutex::new(vec![]));
+        let d = inner
+            .with_writer(MemWriter(data.clone()))
+            .with_ansi(false)
+            .without_time()
+            .with_level(false);
         Self {
+            inner: d,
+            data,
             _source: source,
             event_source_handle,
         }
     }
 }
 
-impl Drop for EventLogSubscriber {
+impl<S, N, L> Drop for EventLogLayer<S, N, L>
+where
+    S: Subscriber + for<'span> LookupSpan<'span>,
+    N: for<'writer> FormatFields<'writer> + 'static,
+{
     fn drop(&mut self) {
         unsafe { EventLog::DeregisterEventSource(self.event_source_handle) };
     }
 }
 
-impl tracing_core::subscriber::Subscriber for EventLogSubscriber {
-    fn enabled(&self, metadata: &tracing::Metadata<'_>) -> bool {
-        true
+impl<S, N, L> tracing_subscriber::Layer<S> for EventLogLayer<S, N, L>
+where
+    S: Subscriber + for<'span> LookupSpan<'span>,
+    N: for<'writer> FormatFields<'writer> + 'static,
+    Format<L, ()>: FormatEvent<S, N>,
+    L: 'static,
+{
+    fn enabled(&self, metadata: &Metadata<'_>, ctx: Context<'_, S>) -> bool {
+        self.inner.enabled(metadata, ctx)
     }
 
-    fn new_span(&self, span: &tracing_core::span::Attributes<'_>) -> tracing_core::span::Id {
-        println!("new span");
-        tracing_core::span::Id::from_u64(1)
+    fn on_new_span(&self, attrs: &span::Attributes<'_>, id: &span::Id, ctx: Context<'_, S>) {
+        self.inner.on_new_span(attrs, id, ctx)
     }
 
-    fn record(&self, span: &tracing_core::span::Id, values: &tracing_core::span::Record<'_>) {
-        println!("record");
+    fn on_record(
+        &self,
+        span: &tracing_core::span::Id,
+        values: &tracing_core::span::Record<'_>,
+        ctx: Context<'_, S>,
+    ) {
+        self.inner.on_record(span, values, ctx)
     }
 
-    fn record_follows_from(&self, span: &tracing_core::span::Id, follows: &tracing_core::span::Id) {
-        println!("record follows from");
-    }
+    fn on_event(&self, event: &Event<'_>, ctx: Context<'_, S>) {
+        self.inner.on_event(event, ctx);
 
-    fn event(&self, event: &Event<'_>) {
-        let mut fields_vec: Vec<WideCString> = vec![];
-        let mut format_fields = |field: &field::Field, value: &dyn fmt::Debug| {
-            println!("{}={:?}", field.name(), value);
-            let entry =
-                WideCString::from_os_str(OsStr::new(&format!("{}={:?}", field.name(), value)))
-                    .unwrap();
-
-            fields_vec.push(entry);
-        };
-
-        event.record(&mut format_fields);
-
-        let pwstrs = fields_vec
-            .iter_mut()
-            .map(|f| windows::core::PWSTR::from_raw(f.as_mut_ptr()))
-            .collect::<Vec<_>>();
         unsafe {
-            println!("{}", std::io::Error::last_os_error());
+            let info = String::from_utf8(self.data.lock().unwrap().clone()).unwrap();
+            self.data.lock().unwrap().clear();
 
+            let mut fields_vec = vec![WideCString::from_os_str(OsStr::new(&info)).unwrap()];
+            let pwstrs = fields_vec
+                .iter_mut()
+                .map(|f| windows::core::PWSTR::from_raw(f.as_mut_ptr()))
+                .collect::<Vec<_>>();
             let res = EventLog::ReportEventW(
                 self.event_source_handle,
                 EVENTLOG_ERROR_TYPE,
@@ -91,16 +113,40 @@ impl tracing_core::subscriber::Subscriber for EventLogSubscriber {
                 &pwstrs,
                 null_mut(),
             );
-            println!("{}", std::io::Error::last_os_error());
         }
     }
 
-    fn enter(&self, span: &tracing_core::span::Id) {
-        println!("enter");
+    fn on_enter(&self, id: &tracing_core::span::Id, ctx: Context<'_, S>) {
+        self.inner.on_enter(id, ctx)
     }
 
-    fn exit(&self, span: &tracing_core::span::Id) {
-        println!("exit");
+    fn on_exit(&self, id: &tracing_core::span::Id, ctx: Context<'_, S>) {
+        self.inner.on_exit(id, ctx);
+    }
+
+    fn on_close(&self, id: tracing_core::span::Id, ctx: Context<'_, S>) {
+        self.inner.on_close(id, ctx)
+    }
+}
+
+struct MemWriter(Arc<Mutex<Vec<u8>>>);
+
+impl std::io::Write for MemWriter {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+impl<'a> MakeWriter<'a> for MemWriter {
+    type Writer = MemWriter;
+
+    fn make_writer(&'a self) -> Self::Writer {
+        MemWriter(self.0.clone())
     }
 }
 
