@@ -11,14 +11,13 @@ fn main() {
     //register(&log_source);
 
     tracing_subscriber::registry()
-        .with(EventLogLayer::new(
-            log_source,
-            tracing_subscriber::fmt::layer().pretty(),
-        ))
+        .with(EventLogLayer::pretty(log_source))
         .init();
     let n = 5;
     let sequence = fibonacci_seq(n);
     info!("The first {} fibonacci numbers are {:?}", n, sequence);
+
+    println!("hi");
 }
 
 #[instrument]

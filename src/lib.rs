@@ -4,8 +4,8 @@ use std::sync::Arc;
 use std::{ffi::OsStr, ptr::null_mut, sync::Mutex};
 use tracing::{span, Metadata, Subscriber};
 use tracing_core::Event;
-use tracing_subscriber::fmt::format::Format;
-use tracing_subscriber::fmt::{format, FormatEvent, FormatFields, Layer, MakeWriter};
+use tracing_subscriber::fmt::format::{Compact, DefaultFields, Format, Pretty};
+use tracing_subscriber::fmt::{FormatEvent, FormatFields, Layer, MakeWriter};
 use tracing_subscriber::layer::Context;
 use tracing_subscriber::registry::LookupSpan;
 use widestring::WideCString;
@@ -19,23 +19,25 @@ use windows::{
 
 pub mod eventmsgs;
 
-pub struct EventLogLayer<S, N, L>
+pub struct EventLogLayer<S, N, F>
 where
     S: Subscriber + for<'span> LookupSpan<'span>,
     N: for<'writer> FormatFields<'writer> + 'static,
+    F: FormatEvent<S, N>,
 {
     _source: WideCString,
     event_source_handle: EventSourceHandle,
     data: Arc<Mutex<Vec<u8>>>,
-    inner: Layer<S, N, format::Format<L, ()>, MemWriter>,
+    inner: Layer<S, N, F, MemWriter>,
 }
 
-impl<S, N, L> EventLogLayer<S, N, L>
+impl<S, N, F> EventLogLayer<S, N, F>
 where
     S: Subscriber + for<'span> LookupSpan<'span>,
     N: for<'writer> FormatFields<'writer> + 'static,
+    F: FormatEvent<S, N>,
 {
-    pub fn new<M>(source: impl Into<String>, inner: Layer<S, N, format::Format<L, M>>) -> Self {
+    pub fn new(source: impl Into<String>, inner: Layer<S, N, F>) -> Self {
         let source = WideCString::from_os_str(source.into()).unwrap();
 
         let event_source_handle = unsafe {
@@ -43,13 +45,9 @@ where
                 .unwrap()
         };
         let data = Arc::new(Mutex::new(vec![]));
-        let d = inner
-            .with_writer(MemWriter(data.clone()))
-            .with_ansi(false)
-            .without_time()
-            .with_level(false);
+        let inner = inner.with_writer(MemWriter(data.clone()));
         Self {
-            inner: d,
+            inner,
             data,
             _source: source,
             event_source_handle,
@@ -57,22 +55,54 @@ where
     }
 }
 
-impl<S, N, L> Drop for EventLogLayer<S, N, L>
+impl<S> EventLogLayer<S, Pretty, Format<Pretty, ()>>
+where
+    S: Subscriber + for<'span> LookupSpan<'span>,
+{
+    pub fn pretty(source: impl Into<String>) -> Self {
+        Self::new(
+            source,
+            tracing_subscriber::fmt::layer()
+                .pretty()
+                .with_ansi(false)
+                .without_time()
+                .with_level(false),
+        )
+    }
+}
+
+impl<S> EventLogLayer<S, DefaultFields, Format<Compact, ()>>
+where
+    S: Subscriber + for<'span> LookupSpan<'span>,
+{
+    pub fn compact(source: impl Into<String>) -> Self {
+        Self::new(
+            source,
+            tracing_subscriber::fmt::layer()
+                .compact()
+                .with_ansi(false)
+                .without_time()
+                .with_level(false),
+        )
+    }
+}
+
+impl<S, N, F> Drop for EventLogLayer<S, N, F>
 where
     S: Subscriber + for<'span> LookupSpan<'span>,
     N: for<'writer> FormatFields<'writer> + 'static,
+    F: FormatEvent<S, N>,
 {
     fn drop(&mut self) {
         unsafe { EventLog::DeregisterEventSource(self.event_source_handle) };
     }
 }
 
-impl<S, N, L> tracing_subscriber::Layer<S> for EventLogLayer<S, N, L>
+impl<S, N, F> tracing_subscriber::Layer<S> for EventLogLayer<S, N, F>
 where
     S: Subscriber + for<'span> LookupSpan<'span>,
     N: for<'writer> FormatFields<'writer> + 'static,
-    Format<L, ()>: FormatEvent<S, N>,
-    L: 'static,
+    F: FormatEvent<S, N> + 'static,
 {
     fn enabled(&self, metadata: &Metadata<'_>, ctx: Context<'_, S>) -> bool {
         self.inner.enabled(metadata, ctx)
