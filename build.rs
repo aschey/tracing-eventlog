@@ -21,10 +21,6 @@ const MC_ARGS: &[&str] = &["-U", "-h", "res", "-r", "res", INPUT_FILE];
 
 #[cfg(not(windows))]
 const MC_BIN: &str = "windmc";
-#[cfg(not(windows))]
-const RC_BIN: &str = "windres";
-#[cfg(not(windows))]
-const RC_ARGS: &[&str] = &["-v", "-i", "res/eventmsgs.rc", "-o", "res/eventmsgs.lib"];
 
 #[cfg(not(windows))]
 fn prefix_command(cmd: &str) -> Cow<str> {
@@ -34,12 +30,7 @@ fn prefix_command(cmd: &str) -> Cow<str> {
 }
 
 #[cfg(windows)]
-const MC_BIN: &str = "C:\\Program Files (x86)\\Windows Kits\\10\\bin\\10.0.19041.0\\x64\\mc.exe";
-#[cfg(windows)]
-const RC_BIN: &str = "C:\\Program Files (x86)\\Windows Kits\\10\\bin\\10.0.19041.0\\x64\\rc.exe";
-#[cfg(windows)]
-const RC_ARGS: &[&str] = &["/v", "/fo", "res/eventmsgs.lib", "res/eventmsgs.rc"];
-
+const MC_BIN: &str = "mc.exe";
 #[cfg(windows)]
 fn prefix_command(cmd: &str) -> Cow<str> {
     cmd.into()
@@ -128,9 +119,10 @@ fn main() {
             "Generating {} from {} with hash {}",
             GENERATED_FILE, INPUT_FILE, origin_hash
         );
+        let mc_exe = embed_resource::find_windows_sdk_tool(MC_BIN).unwrap();
+        run_tool(&mc_exe.to_string_lossy().to_string(), MC_ARGS);
+        embed_resource::compile("res/eventmsgs.rc");
 
-        run_tool(MC_BIN, MC_ARGS);
-        run_tool(RC_BIN, RC_ARGS);
         gen_rust(&origin_hash);
     }
 
