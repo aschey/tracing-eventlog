@@ -200,7 +200,7 @@ fn get_tool_path(name: &str) -> String {
 }
 
 #[cfg(not(windows))]
-fn get_tool_path(name: String) -> String {
+fn get_tool_path(name: &str) -> String {
     name
 }
 
