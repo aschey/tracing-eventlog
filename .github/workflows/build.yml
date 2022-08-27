@@ -12,8 +12,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-      - uses: Swatinem/rust-cache@v1
+      - uses: Swatinem/rust-cache@v2
         with:
-          sharedKey: cache-${{ hashFiles('**/Cargo.lock') }}
+          shared-key: cache-${{ hashFiles('**/Cargo.lock') }}
       - name: test
         run: cargo test
