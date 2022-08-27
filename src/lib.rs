@@ -1,25 +1,20 @@
+#[cfg_attr(test, double)]
+use eventlog::EventLog;
+#[cfg(test)]
+use mockall_double::double;
 use registry::{Data, Hive, Security};
 use std::io;
 use std::sync::Arc;
-use std::{ffi::OsStr, fmt::Debug, ptr::null_mut, sync::Mutex};
-use tracing::{span, Level, Metadata, Subscriber};
+use std::{ffi::OsStr, fmt::Debug, sync::Mutex};
+use tracing::{span, Metadata, Subscriber};
 use tracing_core::{Event, Field};
 use tracing_subscriber::fmt::format::{Compact, DefaultFields, Format, Pretty};
 use tracing_subscriber::fmt::{FormatEvent, FormatFields, Layer, MakeWriter};
 use tracing_subscriber::layer::Context;
 use tracing_subscriber::registry::LookupSpan;
 use widestring::WideCString;
-use windows::{
-    core::PCWSTR,
-    Win32::{
-        Foundation::PSID,
-        System::EventLog::{
-            self, EventSourceHandle, EVENTLOG_ERROR_TYPE, EVENTLOG_INFORMATION_TYPE,
-            EVENTLOG_WARNING_TYPE,
-        },
-    },
-};
 
+mod eventlog;
 pub mod eventmsgs;
 
 pub struct EventLogLayer<S, N, F>
@@ -28,8 +23,8 @@ where
     N: for<'writer> FormatFields<'writer> + 'static,
     F: FormatEvent<S, N>,
 {
-    _source: WideCString,
-    event_source_handle: EventSourceHandle,
+    //_source: WideCString,
+    event_log: EventLog,
     data: Arc<Mutex<Vec<u8>>>,
     inner: Layer<S, N, F, MemWriter>,
 }
@@ -40,20 +35,28 @@ where
     N: for<'writer> FormatFields<'writer> + 'static,
     F: FormatEvent<S, N>,
 {
-    pub fn new(source: impl Into<String>, inner: Layer<S, N, F>) -> Self {
-        let source = WideCString::from_os_str(source.into()).unwrap();
+    pub fn new<T: Into<String> + 'static>(source: T, inner: Layer<S, N, F>) -> Self {
+        let event_log = EventLog::new(source);
 
-        let event_source_handle = unsafe {
-            EventLog::RegisterEventSourceW(PCWSTR::null(), PCWSTR::from_raw(source.as_ptr()))
-                .unwrap()
-        };
         let data = Arc::new(Mutex::new(vec![]));
         let inner = inner.with_writer(MemWriter(data.clone()));
         Self {
             inner,
             data,
-            _source: source,
-            event_source_handle,
+            // _source: source,
+            event_log,
+        }
+    }
+
+    #[cfg(test)]
+    fn from_event_log(event_log: EventLog, inner: Layer<S, N, F>) -> Self {
+        let data = Arc::new(Mutex::new(vec![]));
+        let inner = inner.with_writer(MemWriter(data.clone()));
+        Self {
+            inner,
+            data,
+            // _source: source,
+            event_log,
         }
     }
 }
@@ -62,7 +65,7 @@ impl<S> EventLogLayer<S, Pretty, Format<Pretty, ()>>
 where
     S: Subscriber + for<'span> LookupSpan<'span>,
 {
-    pub fn pretty(source: impl Into<String>) -> Self {
+    pub fn pretty<T: Into<String> + 'static>(source: T) -> Self {
         Self::new(
             source,
             tracing_subscriber::fmt::layer()
@@ -78,7 +81,7 @@ impl<S> EventLogLayer<S, DefaultFields, Format<Compact, ()>>
 where
     S: Subscriber + for<'span> LookupSpan<'span>,
 {
-    pub fn compact(source: impl Into<String>) -> Self {
+    pub fn compact<T: Into<String> + 'static>(source: T) -> Self {
         Self::new(
             source,
             tracing_subscriber::fmt::layer()
@@ -87,17 +90,6 @@ where
                 .without_time()
                 .with_level(false),
         )
-    }
-}
-
-impl<S, N, F> Drop for EventLogLayer<S, N, F>
-where
-    S: Subscriber + for<'span> LookupSpan<'span>,
-    N: for<'writer> FormatFields<'writer> + 'static,
-    F: FormatEvent<S, N>,
-{
-    fn drop(&mut self) {
-        unsafe { EventLog::DeregisterEventSource(self.event_source_handle) };
     }
 }
 
@@ -134,35 +126,24 @@ where
             }
         };
         event.record(&mut visitor);
-        let (msg_type, level) = match *event.metadata().level() {
-            Level::ERROR => (EVENTLOG_ERROR_TYPE, eventmsgs::MSG_ERROR),
-            Level::WARN => (EVENTLOG_WARNING_TYPE, eventmsgs::MSG_WARNING),
-            Level::INFO => (EVENTLOG_INFORMATION_TYPE, eventmsgs::MSG_INFO),
-            Level::DEBUG => (EVENTLOG_INFORMATION_TYPE, eventmsgs::MSG_DEBUG),
-            Level::TRACE => (EVENTLOG_INFORMATION_TYPE, eventmsgs::MSG_TRACE),
-        };
-        unsafe {
-            let mut data = self.data.lock().unwrap();
-            let info = String::from_utf8(data.clone()).unwrap();
-            data.clear();
 
-            let mut fields_vec = vec![WideCString::from_os_str(OsStr::new(&info)).unwrap()];
-            let pwstrs = fields_vec
-                .iter_mut()
-                .map(|f| windows::core::PWSTR::from_raw(f.as_mut_ptr()))
-                .collect::<Vec<_>>();
+        let mut data = self.data.lock().unwrap();
+        let info = String::from_utf8(data.clone()).unwrap();
+        data.clear();
 
-            let res = EventLog::ReportEventW(
-                self.event_source_handle,
-                msg_type,
+        let mut fields_vec = vec![WideCString::from_os_str(OsStr::new(&info)).unwrap()];
+        let pwstrs = fields_vec
+            .iter_mut()
+            .map(|f| windows::core::PWSTR::from_raw(f.as_mut_ptr()))
+            .collect::<Vec<_>>();
+
+        self.event_log
+            .report_event(
+                *event.metadata().level(),
                 eventmsgs::get_category(category),
-                level,
-                PSID(null_mut()),
-                0,
                 &pwstrs,
-                null_mut(),
-            );
-        }
+            )
+            .unwrap();
     }
 
     fn on_enter(&self, id: &tracing_core::span::Id, ctx: Context<'_, S>) {
@@ -242,3 +223,7 @@ pub fn deregister(name: &str) {
         .unwrap();
     key.delete(name, true).unwrap();
 }
+
+#[cfg(test)]
+#[path = "./lib_test.rs"]
+mod lib_test;
