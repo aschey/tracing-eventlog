@@ -23,7 +23,7 @@ fn main() {
 #[instrument]
 fn nth_fibonacci(n: u64) -> u64 {
     if n == 0 || n == 1 {
-        debug!("Base case");
+        debug!(category = "UI Events", "Base case");
         1
     } else {
         debug!("Recursing");

@@ -1,9 +1,9 @@
 use registry::{Data, Hive, Security};
 use std::io;
 use std::sync::Arc;
-use std::{ffi::OsStr, ptr::null_mut, sync::Mutex};
-use tracing::{span, Metadata, Subscriber};
-use tracing_core::Event;
+use std::{ffi::OsStr, fmt::Debug, ptr::null_mut, sync::Mutex};
+use tracing::{span, Level, Metadata, Subscriber};
+use tracing_core::{Event, Field};
 use tracing_subscriber::fmt::format::{Compact, DefaultFields, Format, Pretty};
 use tracing_subscriber::fmt::{FormatEvent, FormatFields, Layer, MakeWriter};
 use tracing_subscriber::layer::Context;
@@ -13,7 +13,10 @@ use windows::{
     core::PCWSTR,
     Win32::{
         Foundation::PSID,
-        System::EventLog::{self, EventSourceHandle, EVENTLOG_ERROR_TYPE},
+        System::EventLog::{
+            self, EventSourceHandle, EVENTLOG_ERROR_TYPE, EVENTLOG_INFORMATION_TYPE,
+            EVENTLOG_WARNING_TYPE,
+        },
     },
 };
 
@@ -124,20 +127,36 @@ where
     fn on_event(&self, event: &Event<'_>, ctx: Context<'_, S>) {
         self.inner.on_event(event, ctx);
 
+        let mut category = "".to_owned();
+        let mut visitor = |field: &Field, value: &dyn Debug| {
+            if field.name() == "category" {
+                category = format!("{:?}", value);
+            }
+        };
+        event.record(&mut visitor);
+        let (msg_type, level) = match *event.metadata().level() {
+            Level::ERROR => (EVENTLOG_ERROR_TYPE, eventmsgs::MSG_ERROR),
+            Level::WARN => (EVENTLOG_WARNING_TYPE, eventmsgs::MSG_WARNING),
+            Level::INFO => (EVENTLOG_INFORMATION_TYPE, eventmsgs::MSG_INFO),
+            Level::DEBUG => (EVENTLOG_INFORMATION_TYPE, eventmsgs::MSG_DEBUG),
+            Level::TRACE => (EVENTLOG_INFORMATION_TYPE, eventmsgs::MSG_TRACE),
+        };
         unsafe {
-            let info = String::from_utf8(self.data.lock().unwrap().clone()).unwrap();
-            self.data.lock().unwrap().clear();
+            let mut data = self.data.lock().unwrap();
+            let info = String::from_utf8(data.clone()).unwrap();
+            data.clear();
 
             let mut fields_vec = vec![WideCString::from_os_str(OsStr::new(&info)).unwrap()];
             let pwstrs = fields_vec
                 .iter_mut()
                 .map(|f| windows::core::PWSTR::from_raw(f.as_mut_ptr()))
                 .collect::<Vec<_>>();
+
             let res = EventLog::ReportEventW(
                 self.event_source_handle,
-                EVENTLOG_ERROR_TYPE,
-                eventmsgs::DATABASE_CATEGORY,
-                eventmsgs::MSG_ERROR,
+                msg_type,
+                eventmsgs::get_category(category),
+                level,
                 PSID(null_mut()),
                 0,
                 &pwstrs,
@@ -210,7 +229,7 @@ pub fn register(name: &str) {
         )
         .unwrap();
     app_key
-        .set_value("CategoryCount", &Data::U32(3u32))
+        .set_value("CategoryCount", &Data::U32(eventmsgs::CATEGORY_COUNT))
         .unwrap();
     app_key
         .set_value("TypesSupported", &Data::U32(7u32))

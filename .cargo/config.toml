@@ -1,0 +1,2 @@
+[env]
+TRACING_EVENTLOG_CATEGORIES = "Database Events, Network Events, UI Events"

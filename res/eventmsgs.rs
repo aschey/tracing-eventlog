@@ -1,12 +1,24 @@
-// Auto-generated from origin with SHA256 6a4d3a714bf5c50d74a5463e0995c9645114a92b6be00267aa7a44ffa59fa574.
+// Auto-generated from origin with SHA256 22a60cba10c65c9d9493acd0276b2701907e01560114574f6f17dfd8a39e3a76.
+pub(crate) const CATEGORY_COUNT: u32 = 3;
+
 pub const STATUS_SEVERITY_INFORMATIONAL: u32 = 0x1;
 pub const STATUS_SEVERITY_WARNING: u32 = 0x2;
 pub const STATUS_SEVERITY_ERROR: u32 = 0x3;
-pub const NETWORK_CATEGORY: u16 = 0x00000001;
-pub const DATABASE_CATEGORY: u16 = 0x00000002;
-pub const UI_CATEGORY: u16 = 0x00000003;
+pub const DATABASE_EVENTS_CATEGORY: u16 = 0x00000001;
+pub const NETWORK_EVENTS_CATEGORY: u16 = 0x00000002;
+pub const UI_EVENTS_CATEGORY: u16 = 0x00000003;
 pub const MSG_ERROR: u32 = 0xC0000100;
 pub const MSG_WARNING: u32 = 0x80000101;
 pub const MSG_INFO: u32 = 0x40000102;
 pub const MSG_DEBUG: u32 = 0x40000103;
 pub const MSG_TRACE: u32 = 0x40000104;
+
+pub fn get_category(category: String) -> u16 {
+    match category.trim().to_lowercase().as_ref() {
+        "\"database events\"" => DATABASE_EVENTS_CATEGORY,
+        "\"network events\"" => NETWORK_EVENTS_CATEGORY,
+        "\"ui events\"" => UI_EVENTS_CATEGORY,
+        _ => 0,
+    }
+}
+    
