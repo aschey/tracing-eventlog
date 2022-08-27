@@ -1,6 +1,6 @@
 #[cfg(test)]
 use mockall::automock;
-use std::{io, ptr::null_mut};
+use std::{error::Error, io, ptr::null_mut};
 use tracing::Level;
 use widestring::WideCString;
 use windows::{
@@ -15,7 +15,10 @@ use windows::{
     },
 };
 
-use crate::eventmsgs;
+use crate::{
+    error::{EventLogError, Result},
+    eventmsgs,
+};
 
 pub(crate) struct EventLog {
     handle: EventSourceHandle,
@@ -44,12 +47,15 @@ impl From<Level> for MessageType {
 
 #[cfg_attr(test, automock)]
 impl EventLog {
-    pub(crate) fn new<T: Into<String> + 'static>(source: T) -> Self {
-        let source = WideCString::from_os_str(source.into()).unwrap();
+    pub(crate) fn new<T: Into<String> + 'static>(source: T) -> Result<Self> {
+        let source =
+            WideCString::from_os_str(source.into()).map_err(EventLogError::StrConvertError)?;
         let win_source = PCWSTR::from_raw(source.as_ptr());
-        let handle =
-            unsafe { WinEventLog::RegisterEventSourceW(PCWSTR::null(), win_source).unwrap() };
-        Self { handle }
+        let handle = unsafe {
+            WinEventLog::RegisterEventSourceW(PCWSTR::null(), win_source)
+                .map_err(EventLogError::WindowsError)?
+        };
+        Ok(Self { handle })
     }
 
     pub(crate) fn report_event<T: Into<MessageType> + 'static>(
@@ -57,7 +63,7 @@ impl EventLog {
         message_type: T,
         category: u16,
         mut messages: Vec<WideCString>,
-    ) -> Result<(), io::Error> {
+    ) -> Result<()> {
         let message_type: MessageType = message_type.into();
 
         let pwstrs = messages
@@ -78,7 +84,7 @@ impl EventLog {
             )
         };
         if !result.as_bool() {
-            return Err(io::Error::last_os_error());
+            return Err(EventLogError::SystemError(io::Error::last_os_error()));
         }
 
         Ok(())

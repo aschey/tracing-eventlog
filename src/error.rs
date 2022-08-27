@@ -1,0 +1,31 @@
+use thiserror::Error;
+use widestring::error::ContainsNul;
+
+pub type Result<T> = core::result::Result<T, EventLogError>;
+
+#[derive(Error, Debug)]
+pub enum EventLogError {
+    #[error("Invalid string: {0}")]
+    StrConvertError(#[from] ContainsNul<u16>),
+    #[error("Error invoking windows API: {0}")]
+    WindowsError(#[from] windows::core::Error),
+    #[error("OS error occured during Windows API call: {0}")]
+    SystemError(#[from] std::io::Error),
+}
+
+#[cfg(windows)]
+#[derive(Error, Debug)]
+pub enum RegistryError {
+    #[error("OS error occured during Windows API call: {0}")]
+    SystemError(#[from] std::io::Error),
+    #[error("Unable to locate current exe path")]
+    InvalidExePath,
+    #[error("Permission denied: {0}")]
+    PermissionDenied(#[from] registry::Error),
+    #[error("Error settings registry key: {0}")]
+    KeyError(#[from] registry::key::Error),
+    #[error("Error setting registry value: {0}")]
+    ValueError(#[from] registry::value::Error),
+    #[error("Invalid string: {0}")]
+    StrConvertError(#[from] utfx::NulError<u16>),
+}

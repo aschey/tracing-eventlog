@@ -1,10 +1,9 @@
+use error::Result;
 #[cfg_attr(test, double)]
 #[cfg(windows)]
 use eventlog::EventLog;
 #[cfg(test)]
 use mockall_double::double;
-#[cfg(windows)]
-use registry::{Data, Hive, Security};
 use std::io;
 use std::sync::Arc;
 use std::{ffi::OsStr, fmt::Debug, sync::Mutex};
@@ -19,6 +18,10 @@ use widestring::WideCString;
 #[cfg(windows)]
 mod eventlog;
 mod eventmsgs;
+mod registry;
+pub use self::registry::platform::*;
+
+pub mod error;
 
 pub struct EventLogLayer<S, N, F>
 where
@@ -39,19 +42,19 @@ where
     N: for<'writer> FormatFields<'writer> + 'static,
     F: FormatEvent<S, N>,
 {
-    pub fn new<T: Into<String> + 'static>(source: T, inner: Layer<S, N, F>) -> Self {
+    pub fn new<T: Into<String> + 'static>(source: T, inner: Layer<S, N, F>) -> Result<Self> {
         #[cfg(windows)]
-        let event_log = EventLog::new(source);
+        let event_log = EventLog::new(source)?;
 
         let data = Arc::new(Mutex::new(vec![]));
         let inner = inner.with_writer(MemWriter(data.clone()));
-        Self {
+        Ok(Self {
             inner,
             data,
             // _source: source,
             #[cfg(windows)]
             event_log,
-        }
+        })
     }
 
     #[cfg(all(windows, test))]
@@ -71,7 +74,7 @@ impl<S> EventLogLayer<S, Pretty, Format<Pretty, ()>>
 where
     S: Subscriber + for<'span> LookupSpan<'span>,
 {
-    pub fn pretty<T: Into<String> + 'static>(source: T) -> Self {
+    pub fn pretty<T: Into<String> + 'static>(source: T) -> Result<Self> {
         Self::new(
             source,
             tracing_subscriber::fmt::layer()
@@ -87,7 +90,7 @@ impl<S> EventLogLayer<S, DefaultFields, Format<Compact, ()>>
 where
     S: Subscriber + for<'span> LookupSpan<'span>,
 {
-    pub fn compact<T: Into<String> + 'static>(source: T) -> Self {
+    pub fn compact<T: Into<String> + 'static>(source: T) -> Result<Self> {
         Self::new(
             source,
             tracing_subscriber::fmt::layer()
@@ -186,64 +189,6 @@ impl<'a> MakeWriter<'a> for MemWriter {
         MemWriter(self.0.clone())
     }
 }
-
-const REG_BASEKEY: &str = r"SYSTEM\CurrentControlSet\Services\EventLog\Application";
-
-#[cfg(windows)]
-pub fn register(name: &str) {
-    use windows::Win32::System::EventLog::{
-        EVENTLOG_ERROR_TYPE, EVENTLOG_INFORMATION_TYPE, EVENTLOG_WARNING_TYPE,
-    };
-
-    let current_exe = std::env::current_exe().unwrap();
-    let exe_path = current_exe.to_str().unwrap();
-    println!("exe path {exe_path}");
-    let exe_path = &exe_path.replacen("\\\\?\\", "", 1);
-    let key = Hive::LocalMachine
-        .open(REG_BASEKEY, Security::Write)
-        .unwrap();
-    let app_key = key.create(name, Security::Write).unwrap();
-    app_key
-        .set_value(
-            "EventMessageFile",
-            &Data::String(exe_path.try_into().unwrap()),
-        )
-        .unwrap();
-    app_key
-        .set_value(
-            "CategoryMessageFile",
-            &Data::String(exe_path.try_into().unwrap()),
-        )
-        .unwrap();
-    app_key
-        .set_value(
-            "ParameterMessageFile",
-            &Data::String(exe_path.try_into().unwrap()),
-        )
-        .unwrap();
-    app_key
-        .set_value("CategoryCount", &Data::U32(eventmsgs::CATEGORY_COUNT))
-        .unwrap();
-    let supported_types =
-        EVENTLOG_ERROR_TYPE.0 | EVENTLOG_WARNING_TYPE.0 | EVENTLOG_INFORMATION_TYPE.0;
-    app_key
-        .set_value("TypesSupported", &Data::U32(supported_types as u32))
-        .unwrap();
-}
-
-#[cfg(not(windows))]
-pub fn register(name: &str) {}
-
-#[cfg(windows)]
-pub fn deregister(name: &str) {
-    let key = Hive::LocalMachine
-        .open(REG_BASEKEY, Security::Read)
-        .unwrap();
-    key.delete(name, true).unwrap();
-}
-
-#[cfg(not(windows))]
-pub fn deregister(name: &str) {}
 
 #[cfg(test)]
 #[path = "./lib_test.rs"]
