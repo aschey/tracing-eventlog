@@ -1,7 +1,6 @@
 use regex::Regex;
 use sha2::{Digest, Sha256};
 use std::{
-    borrow::Cow,
     env,
     fs::{self, File},
     io::{copy, prelude::*, BufRead, BufReader, LineWriter},
@@ -21,20 +20,11 @@ const GENERATED_FILE: &str = "res/eventmsgs.rs";
 const HEADER_FILE: &str = "res/eventmsgs.h";
 const LIB_FILE: &str = "res/eventmsgs.lib";
 
+const MC_BIN: &str = "mc.exe";
 const MC_ARGS: &[&str] = &["-U", "-h", "res", "-r", "res", INPUT_FILE];
 
-#[cfg(not(windows))]
-const RC_ARGS: &[&str] = &["-v", "-i", "res/eventmsgs.rc", "-o", "res/eventmsgs.lib"];
-#[cfg(windows)]
-const RC_ARGS: &[&str] = &["/v", "/fo", "res/eventmsgs.lib", "res/eventmsgs.rc"];
-
-#[cfg(not(windows))]
-const MC_BIN: &str = "windmc";
-
-#[cfg(not(windows))]
-const RC_BIN: &str = "windres";
-#[cfg(windows)]
 const RC_BIN: &str = "rc.exe";
+const RC_ARGS: &[&str] = &["/v", "/fo", "res/eventmsgs.lib", "res/eventmsgs.rc"];
 
 const FUNC_TEXT: &str = "
 #[allow(unused_variables)]
@@ -50,23 +40,8 @@ const MATCH_TEXT: &str = "
     }
 ";
 
-#[cfg(not(windows))]
-fn prefix_command(cmd: &str) -> Cow<str> {
-    let target = env::var("TARGET").unwrap();
-    let arch: &str = target.split("-").collect::<Vec<&str>>()[0];
-    format!("{}-w64-mingw32-{}", arch, cmd).into()
-}
-
-#[cfg(windows)]
-const MC_BIN: &str = "mc.exe";
-#[cfg(windows)]
-fn prefix_command(cmd: &str) -> Cow<str> {
-    cmd.into()
-}
-
-fn run_tool(cmd: &str, args: &[&str]) -> Result<(), ()> {
-    let program = prefix_command(cmd);
-    let mut command = Command::new(program.as_ref());
+fn run_tool(program: &str, args: &[&str]) -> Result<(), ()> {
+    let mut command = Command::new(program);
     match command.args(args).output() {
         Ok(out) => {
             println!("{:?}", str::from_utf8(&out.stderr).unwrap());
@@ -229,6 +204,11 @@ fn main() {
     let file_contents = fs::read_to_string(TMPL_FILE).unwrap();
     let new_contents = file_contents.replace("{CATEGORIES}", &categories);
     fs::write(INPUT_FILE, new_contents).unwrap();
+
+    if !cfg!(windows) {
+        return;
+    }
+
     let origin_hash = file_hash(TMPL_FILE);
     if !file_contains(GENERATED_FILE, &origin_hash) {
         println!(

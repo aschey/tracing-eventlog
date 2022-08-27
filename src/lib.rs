@@ -16,8 +16,9 @@ use tracing_subscriber::layer::Context;
 use tracing_subscriber::registry::LookupSpan;
 use widestring::WideCString;
 
+#[cfg(windows)]
 mod eventlog;
-pub mod eventmsgs;
+mod eventmsgs;
 
 pub struct EventLogLayer<S, N, F>
 where
@@ -53,7 +54,7 @@ where
         }
     }
 
-    #[cfg(test)]
+    #[cfg(all(windows, test))]
     fn from_event_log(event_log: EventLog, inner: Layer<S, N, F>) -> Self {
         let data = Arc::new(Mutex::new(vec![]));
         let inner = inner.with_writer(MemWriter(data.clone()));
