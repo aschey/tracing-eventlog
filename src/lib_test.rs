@@ -17,8 +17,10 @@ fn test() {
     info!("test log");
 }
 
+#[cfg(not(windows))]
 #[test]
 fn test_can_run() {
+    // Ensure this can run without erroring on non-Windows targets
     let layer = EventLogLayer::pretty("test");
 
     let reg = tracing_subscriber::registry().with(layer);
