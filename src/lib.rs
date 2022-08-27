@@ -1,7 +1,9 @@
 #[cfg_attr(test, double)]
+#[cfg(windows)]
 use eventlog::EventLog;
 #[cfg(test)]
 use mockall_double::double;
+#[cfg(windows)]
 use registry::{Data, Hive, Security};
 use std::io;
 use std::sync::Arc;
@@ -24,6 +26,7 @@ where
     F: FormatEvent<S, N>,
 {
     //_source: WideCString,
+    #[cfg(windows)]
     event_log: EventLog,
     data: Arc<Mutex<Vec<u8>>>,
     inner: Layer<S, N, F, MemWriter>,
@@ -36,6 +39,7 @@ where
     F: FormatEvent<S, N>,
 {
     pub fn new<T: Into<String> + 'static>(source: T, inner: Layer<S, N, F>) -> Self {
+        #[cfg(windows)]
         let event_log = EventLog::new(source);
 
         let data = Arc::new(Mutex::new(vec![]));
@@ -44,6 +48,7 @@ where
             inner,
             data,
             // _source: source,
+            #[cfg(windows)]
             event_log,
         }
     }
@@ -107,6 +112,7 @@ where
         self.inner.on_new_span(attrs, id, ctx)
     }
 
+    #[cfg(windows)]
     fn on_record(
         &self,
         span: &tracing_core::span::Id,
@@ -116,6 +122,7 @@ where
         self.inner.on_record(span, values, ctx)
     }
 
+    #[cfg(windows)]
     fn on_event(&self, event: &Event<'_>, ctx: Context<'_, S>) {
         self.inner.on_event(event, ctx);
 
@@ -131,29 +138,28 @@ where
         let info = String::from_utf8(data.clone()).unwrap();
         data.clear();
 
-        let mut fields_vec = vec![WideCString::from_os_str(OsStr::new(&info)).unwrap()];
-        let pwstrs = fields_vec
-            .iter_mut()
-            .map(|f| windows::core::PWSTR::from_raw(f.as_mut_ptr()))
-            .collect::<Vec<_>>();
+        let fields_vec = vec![WideCString::from_os_str(OsStr::new(&info)).unwrap()];
 
         self.event_log
             .report_event(
                 *event.metadata().level(),
                 eventmsgs::get_category(category),
-                &pwstrs,
+                fields_vec,
             )
             .unwrap();
     }
 
+    #[cfg(windows)]
     fn on_enter(&self, id: &tracing_core::span::Id, ctx: Context<'_, S>) {
         self.inner.on_enter(id, ctx)
     }
 
+    #[cfg(windows)]
     fn on_exit(&self, id: &tracing_core::span::Id, ctx: Context<'_, S>) {
         self.inner.on_exit(id, ctx);
     }
 
+    #[cfg(windows)]
     fn on_close(&self, id: tracing_core::span::Id, ctx: Context<'_, S>) {
         self.inner.on_close(id, ctx)
     }
@@ -182,6 +188,7 @@ impl<'a> MakeWriter<'a> for MemWriter {
 
 const REG_BASEKEY: &str = r"SYSTEM\CurrentControlSet\Services\EventLog\Application";
 
+#[cfg(windows)]
 pub fn register(name: &str) {
     let current_exe = std::env::current_exe().unwrap();
     let exe_path = current_exe.to_str().unwrap();
@@ -217,12 +224,19 @@ pub fn register(name: &str) {
         .unwrap();
 }
 
+#[cfg(not(windows))]
+pub fn register(name: &str) {}
+
+#[cfg(windows)]
 pub fn deregister(name: &str) {
     let key = Hive::LocalMachine
         .open(REG_BASEKEY, Security::Read)
         .unwrap();
     key.delete(name, true).unwrap();
 }
+
+#[cfg(not(windows))]
+pub fn deregister(name: &str) {}
 
 #[cfg(test)]
 #[path = "./lib_test.rs"]

@@ -56,9 +56,15 @@ impl EventLog {
         &self,
         message_type: T,
         category: u16,
-        messages: &[PWSTR],
+        mut messages: Vec<WideCString>,
     ) -> Result<(), io::Error> {
         let message_type: MessageType = message_type.into();
+
+        let pwstrs = messages
+            .iter_mut()
+            .map(|f| windows::core::PWSTR::from_raw(f.as_mut_ptr()))
+            .collect::<Vec<_>>();
+
         let result = unsafe {
             WinEventLog::ReportEventW(
                 self.handle,
@@ -67,7 +73,7 @@ impl EventLog {
                 message_type.level,
                 PSID(null_mut()),
                 0,
-                messages,
+                &pwstrs,
                 null_mut(),
             )
         };
