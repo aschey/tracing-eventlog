@@ -4,10 +4,16 @@ name: CI
 
 jobs:
   test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
     name: Build and test
-    runs-on: windows-latest
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+      - uses: Swatinem/rust-cache@v1
+        with:
+          sharedKey: cache-${{ hashFiles('**/Cargo.lock') }}
       - name: test
         run: cargo test

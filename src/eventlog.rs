@@ -4,7 +4,7 @@ use std::{io, ptr::null_mut};
 use tracing::Level;
 use widestring::WideCString;
 use windows::{
-    core::{PCWSTR, PWSTR},
+    core::PCWSTR,
     Win32::System::EventLog as WinEventLog,
     Win32::{
         Foundation::PSID,
