@@ -36,6 +36,20 @@ const RC_BIN: &str = "windres";
 #[cfg(windows)]
 const RC_BIN: &str = "rc.exe";
 
+const FUNC_TEXT: &str = "
+#[allow(unused_variables)]
+pub fn get_category(category: String) -> u16 {
+{TEXT}
+}
+";
+
+const MATCH_TEXT: &str = "
+    match category.trim().to_lowercase().as_ref() {
+        {TEXT}
+        _ => 0,
+    }
+";
+
 #[cfg(not(windows))]
 fn prefix_command(cmd: &str) -> Cow<str> {
     let target = env::var("TARGET").unwrap();
@@ -106,7 +120,9 @@ fn gen_rust(origin_hash: &str, category_list: Vec<&str>) {
         }
     }
 
-    if !category_list.is_empty() {
+    let func_body = if category_list.is_empty() {
+        "0".to_owned()
+    } else {
         let match_cases = category_list
             .iter()
             .map(|c| {
@@ -118,19 +134,11 @@ fn gen_rust(origin_hash: &str, category_list: Vec<&str>) {
             })
             .collect::<Vec<_>>()
             .join("\n        ");
+        MATCH_TEXT.replace("{TEXT}", &match_cases)
+    };
 
-        let category_func_text = format!(
-            "
-pub fn get_category(category: String) -> u16 {{
-    match category.trim().to_lowercase().as_ref() {{
-        {match_cases}
-        _ => 0,
-    }}
-}}
-    "
-        );
-        writer.write_all(category_func_text.as_bytes()).unwrap();
-    }
+    let category_func_text = FUNC_TEXT.replace("{TEXT}", &func_body);
+    writer.write_all(category_func_text.as_bytes()).unwrap();
 }
 
 fn file_hash(f: &str) -> String {

@@ -13,6 +13,7 @@ pub const MSG_INFO: u32 = 0x40000102;
 pub const MSG_DEBUG: u32 = 0x40000103;
 pub const MSG_TRACE: u32 = 0x40000104;
 
+#[allow(unused_variables)]
 pub fn get_category(category: String) -> u16 {
     match category.trim().to_lowercase().as_ref() {
         "\"database events\"" => DATABASE_EVENTS_CATEGORY,
@@ -21,4 +22,3 @@ pub fn get_category(category: String) -> u16 {
         _ => 0,
     }
 }
-    
