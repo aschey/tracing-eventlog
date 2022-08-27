@@ -191,6 +191,10 @@ const REG_BASEKEY: &str = r"SYSTEM\CurrentControlSet\Services\EventLog\Applicati
 
 #[cfg(windows)]
 pub fn register(name: &str) {
+    use windows::Win32::System::EventLog::{
+        EVENTLOG_ERROR_TYPE, EVENTLOG_INFORMATION_TYPE, EVENTLOG_WARNING_TYPE,
+    };
+
     let current_exe = std::env::current_exe().unwrap();
     let exe_path = current_exe.to_str().unwrap();
     println!("exe path {exe_path}");
@@ -220,8 +224,10 @@ pub fn register(name: &str) {
     app_key
         .set_value("CategoryCount", &Data::U32(eventmsgs::CATEGORY_COUNT))
         .unwrap();
+    let supported_types =
+        EVENTLOG_ERROR_TYPE.0 | EVENTLOG_WARNING_TYPE.0 | EVENTLOG_INFORMATION_TYPE.0;
     app_key
-        .set_value("TypesSupported", &Data::U32(7u32))
+        .set_value("TypesSupported", &Data::U32(supported_types as u32))
         .unwrap();
 }
 
