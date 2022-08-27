@@ -7,7 +7,7 @@ use windows::{
     core::{PCWSTR, PWSTR},
     Win32::System::EventLog as WinEventLog,
     Win32::{
-        Foundation::{BOOL, PSID},
+        Foundation::PSID,
         System::EventLog::{
             EventSourceHandle, EVENTLOG_ERROR_TYPE, EVENTLOG_INFORMATION_TYPE,
             EVENTLOG_WARNING_TYPE, REPORT_EVENT_TYPE,

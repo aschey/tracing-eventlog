@@ -191,6 +191,19 @@ fn gen_category_text(name: &str, id: usize) -> String {
     format!("MessageId={id:#X}\nSymbolicName={category_name}\nLanguage=English\n{name}\n.\n")
 }
 
+#[cfg(windows)]
+fn get_tool_path(name: &str) -> String {
+    embed_resource::find_windows_sdk_tool(name)
+        .unwrap()
+        .to_string_lossy()
+        .to_string()
+}
+
+#[cfg(not(windows))]
+fn get_tool_path(name: String) -> String {
+    name
+}
+
 fn main() {
     for (key, value) in env::vars() {
         println!("Env[{}]={}", key, value);
@@ -217,20 +230,20 @@ fn main() {
     let new_contents = file_contents.replace("{CATEGORIES}", &categories);
     fs::write(INPUT_FILE, new_contents).unwrap();
     let origin_hash = file_hash(TMPL_FILE);
-    if cfg!(not(windows)) || !file_contains(GENERATED_FILE, &origin_hash) {
+    if !file_contains(GENERATED_FILE, &origin_hash) {
         println!(
             "Generating {} from {} with hash {}",
             GENERATED_FILE, INPUT_FILE, origin_hash
         );
-        let mc_exe = embed_resource::find_windows_sdk_tool(MC_BIN).unwrap();
-        let rc_exe = embed_resource::find_windows_sdk_tool(RC_BIN).unwrap();
+        let mc_cmd = get_tool_path(MC_BIN);
+        let rc_cmd = get_tool_path(RC_BIN);
 
         delete_if_exists(HEADER_FILE);
-        run_tool(&mc_exe.to_string_lossy().to_string(), MC_ARGS).unwrap();
+        run_tool(&mc_cmd, MC_ARGS).unwrap();
         error_if_not_found(HEADER_FILE);
 
         delete_if_exists(LIB_FILE);
-        run_tool(&rc_exe.to_string_lossy().to_string(), RC_ARGS).unwrap();
+        run_tool(&rc_cmd, RC_ARGS).unwrap();
         error_if_not_found(LIB_FILE);
         gen_rust(&origin_hash, category_list);
     }
