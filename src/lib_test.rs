@@ -21,7 +21,7 @@ fn test() {
 #[test]
 fn test_can_run() {
     // Ensure this can run without erroring on non-Windows targets
-    let layer = EventLogLayer::pretty("test");
+    let layer = EventLogLayer::pretty("test").unwrap();
 
     let reg = tracing_subscriber::registry().with(layer);
     let _guard = tracing::subscriber::set_default(reg);
