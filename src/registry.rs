@@ -9,8 +9,8 @@ pub mod platform {
 
     const REG_BASEKEY: &str = r"SYSTEM\CurrentControlSet\Services\EventLog\Application";
 
-    pub fn register<'a>(name: impl Into<&'a str>) -> core::result::Result<(), RegistryError> {
-        let name = name.into();
+    pub fn register(name: impl AsRef<str>) -> core::result::Result<(), RegistryError> {
+        let name = name.as_ref();
         let current_exe = std::env::current_exe().map_err(RegistryError::SystemError)?;
         let exe_path = current_exe.to_str().ok_or(RegistryError::InvalidExePath)?;
 
@@ -47,8 +47,8 @@ pub mod platform {
         Ok(())
     }
 
-    pub fn deregister<'a>(name: impl Into<&'a str>) -> core::result::Result<(), RegistryError> {
-        let name = name.into();
+    pub fn deregister(name: impl AsRef<str>) -> core::result::Result<(), RegistryError> {
+        let name = name.as_ref();
         let key = Hive::LocalMachine
             .open(REG_BASEKEY, Security::Read)
             .map_err(map_key_error)?;
