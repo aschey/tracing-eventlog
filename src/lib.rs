@@ -123,6 +123,7 @@ where
         self.inner.on_record(span, values, ctx)
     }
 
+    #[cfg(windows)]
     fn on_event(&self, event: &Event<'_>, ctx: Context<'_, S>) {
         self.inner.on_event(event, ctx);
 
