@@ -7,6 +7,7 @@ pub type Result<T> = core::result::Result<T, EventLogError>;
 pub enum EventLogError {
     #[error("Invalid string: {0}")]
     StrConvertError(#[from] ContainsNul<u16>),
+    #[cfg(windows)]
     #[error("Error invoking windows API: {0}")]
     WindowsError(#[from] windows::core::Error),
     #[error("OS error occured during Windows API call: {0}")]

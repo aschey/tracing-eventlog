@@ -1,6 +1,6 @@
 #[cfg(test)]
 use mockall::automock;
-use std::{error::Error, io, ptr::null_mut};
+use std::{io, ptr::null_mut, time::Instant};
 use tracing::Level;
 use widestring::WideCString;
 use windows::{
@@ -62,14 +62,11 @@ impl EventLog {
         &self,
         message_type: T,
         category: u16,
-        mut messages: Vec<WideCString>,
+        mut message: WideCString,
     ) -> Result<()> {
         let message_type: MessageType = message_type.into();
 
-        let pwstrs = messages
-            .iter_mut()
-            .map(|f| windows::core::PWSTR::from_raw(f.as_mut_ptr()))
-            .collect::<Vec<_>>();
+        let pwstrs = vec![windows::core::PWSTR::from_raw(message.as_mut_ptr())];
 
         let result = unsafe {
             WinEventLog::ReportEventW(
