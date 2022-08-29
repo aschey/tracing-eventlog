@@ -2,8 +2,9 @@
 mod tests {
 
     use tracing::info;
+    use tracing_eventlog::EventLogRegistry;
     use tracing_eventlog::{EventLogLayer, LogSource};
-    use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
+    use tracing_subscriber::prelude::*;
 
     #[test]
     fn super_test() {

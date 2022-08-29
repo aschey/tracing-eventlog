@@ -10,6 +10,9 @@ pub enum EventLogError {
     #[cfg(windows)]
     #[error("Error invoking windows API: {0}")]
     WindowsError(#[from] windows::core::Error),
+    #[cfg(not(windows))]
+    #[error("")]
+    WindowsError(String),
     #[error("OS error occured during Windows API call: {0}")]
     SystemError(#[from] std::io::Error),
 }
@@ -29,4 +32,21 @@ pub enum RegistryError {
     ValueError(#[from] registry::value::Error),
     #[error("Invalid string: {0}")]
     StrConvertError(#[from] utfx::NulError<u16>),
+}
+
+#[cfg(not(windows))]
+#[derive(Error, Debug)]
+pub enum RegistryError {
+    #[error("")]
+    SystemError(String),
+    #[error("")]
+    InvalidExePath(String),
+    #[error("")]
+    PermissionDenied(String),
+    #[error("")]
+    KeyError(String),
+    #[error("")]
+    ValueError(String),
+    #[error("")]
+    StrConvertError(String),
 }

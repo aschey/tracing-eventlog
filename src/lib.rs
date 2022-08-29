@@ -19,6 +19,7 @@ mod eventlog;
 mod eventmsgs;
 mod registry;
 pub use self::registry::platform::*;
+pub use self::registry::*;
 
 pub mod error;
 
