@@ -9,14 +9,12 @@ pub trait EventLogRegistry {
 
 #[cfg(windows)]
 pub mod platform {
+    use super::EventLogRegistry;
+    use crate::{error::RegistryError, eventmsgs};
     use registry::{Data, Hive, RegKey, Security};
     use windows::Win32::System::EventLog::{
         EVENTLOG_ERROR_TYPE, EVENTLOG_INFORMATION_TYPE, EVENTLOG_WARNING_TYPE,
     };
-
-    use crate::{error::RegistryError, eventmsgs};
-
-    use super::EventLogRegistry;
 
     const REG_BASEKEY: &str = r"SYSTEM\CurrentControlSet\Services\EventLog";
 
@@ -160,6 +158,8 @@ pub mod platform {
 
 #[cfg(not(windows))]
 pub mod platform {
+    use super::EventLogRegistry;
+    use crate::error::RegistryError;
     pub struct LogSource;
 
     impl EventLogRegistry for LogSource {
