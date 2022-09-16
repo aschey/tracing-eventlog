@@ -205,7 +205,7 @@ pub mod platform {
             Ok(())
         }
 
-        fn deregister(name: impl AsRef<str>) -> core::result::Result<(), RegistryError> {
+        fn deregister(self) -> core::result::Result<(), RegistryError> {
             Ok(())
         }
     }
