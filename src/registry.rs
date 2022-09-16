@@ -4,7 +4,7 @@ pub trait EventLogRegistry {
     fn application(name: impl Into<String>) -> Self;
     fn custom<'a>(name: impl Into<String>, sources: impl Into<Option<Vec<&'a str>>>) -> Self;
     fn register(&self) -> core::result::Result<(), RegistryError>;
-    fn deregister(name: impl AsRef<str>) -> core::result::Result<(), RegistryError>;
+    fn deregister(self) -> core::result::Result<(), RegistryError>;
 }
 
 #[cfg(windows)]
@@ -84,6 +84,14 @@ pub mod platform {
         }
     }
 
+    fn open_app_key(security: Security) -> core::result::Result<RegKey, RegistryError> {
+        let key = Hive::LocalMachine
+            .open(REG_BASEKEY, security)
+            .map_err(map_key_error)?;
+        let app_key = key.open("Application", security).map_err(map_key_error)?;
+        Ok(app_key)
+    }
+
     impl EventLogRegistry for LogSource {
         fn application(name: impl Into<String>) -> Self {
             Self {
@@ -109,23 +117,38 @@ pub mod platform {
 
             let exe_path = &exe_path.replacen("\\\\?\\", "", 1);
 
-            let key = Hive::LocalMachine
-                .open(REG_BASEKEY, Security::Write)
-                .map_err(map_key_error)?;
-
             match &self.source {
                 SourceType::Application => {
-                    let app_key = key
-                        .open("Application", Security::Write)
-                        .map_err(map_key_error)?;
+                    let app_key_read = open_app_key(Security::Read)?;
+                    if app_key_read.open(&self.name, Security::Read).is_ok() {
+                        return Ok(());
+                    }
+
+                    let app_key = open_app_key(Security::Write)?;
                     let name_key = app_key
                         .create(&self.name, Security::Write)
                         .map_err(map_key_error)?;
                     self.add_keys(name_key, exe_path)?;
                 }
                 SourceType::Custom(sources) => {
+                    let base_key_read = Hive::LocalMachine
+                        .open(REG_BASEKEY, Security::Read)
+                        .map_err(map_key_error)?;
                     for source in sources {
-                        let custom_key = key
+                        if let Ok(custom_key) = base_key_read.open(&self.name, Security::Read) {
+                            if custom_key.open(&self.name, Security::Read).is_ok()
+                                && custom_key.open(source, Security::Read).is_ok()
+                                && custom_key.value("AutoBackupLogFiles").is_ok()
+                                && custom_key.value("MaxSize").is_ok()
+                            {
+                                continue;
+                            }
+                        }
+
+                        let base_key = Hive::LocalMachine
+                            .open(REG_BASEKEY, Security::Read)
+                            .map_err(map_key_error)?;
+                        let custom_key = base_key
                             .create(&self.name, Security::Write)
                             .map_err(map_key_error)?;
                         set_registry_value(&custom_key, "AutoBackupLogFiles", &Data::U32(0))?;
@@ -145,12 +168,19 @@ pub mod platform {
             Ok(())
         }
 
-        fn deregister(name: impl AsRef<str>) -> core::result::Result<(), RegistryError> {
-            let name = name.as_ref();
-            let key = Hive::LocalMachine
-                .open(REG_BASEKEY, Security::Read)
-                .map_err(map_key_error)?;
-            key.delete(name, true).map_err(map_key_error)?;
+        fn deregister(self) -> core::result::Result<(), RegistryError> {
+            match self.source {
+                SourceType::Application => {
+                    let app_key = open_app_key(Security::Write)?;
+                    app_key.delete(self.name, true).map_err(map_key_error)?;
+                }
+                SourceType::Custom(_) => {
+                    let base_key = Hive::LocalMachine
+                        .open(REG_BASEKEY, Security::Read)
+                        .map_err(map_key_error)?;
+                    base_key.delete(self.name, true).map_err(map_key_error)?;
+                }
+            }
             Ok(())
         }
     }
