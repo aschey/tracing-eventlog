@@ -1,18 +1,16 @@
 #[cfg(test)]
 use mockall::automock;
-use std::{io, ptr::null_mut, time::Instant};
 use tracing::Level;
 use widestring::WideCString;
 use windows::{
-    core::PCWSTR,
-    Win32::System::EventLog as WinEventLog,
     Win32::{
-        Foundation::PSID,
+        Foundation::HANDLE,
         System::EventLog::{
-            EventSourceHandle, EVENTLOG_ERROR_TYPE, EVENTLOG_INFORMATION_TYPE,
+            self as WinEventLog, EVENTLOG_ERROR_TYPE, EVENTLOG_INFORMATION_TYPE,
             EVENTLOG_WARNING_TYPE, REPORT_EVENT_TYPE,
         },
     },
+    core::PCWSTR,
 };
 
 use crate::{
@@ -21,8 +19,13 @@ use crate::{
 };
 
 pub(crate) struct EventLog {
-    handle: EventSourceHandle,
+    handle: HANDLE,
 }
+
+// TODO: is this actually safe?
+unsafe impl Send for EventLog {}
+
+unsafe impl Sync for EventLog {}
 
 pub(crate) struct MessageType {
     message_type: REPORT_EVENT_TYPE,
@@ -66,23 +69,20 @@ impl EventLog {
     ) -> Result<()> {
         let message_type: MessageType = message_type.into();
 
-        let pwstrs = vec![windows::core::PWSTR::from_raw(message.as_mut_ptr())];
+        let pwstrs = vec![windows::core::PCWSTR::from_raw(message.as_mut_ptr())];
 
-        let result = unsafe {
+        unsafe {
             WinEventLog::ReportEventW(
                 self.handle,
                 message_type.message_type,
                 category,
                 message_type.level,
-                PSID(null_mut()),
+                None,
                 0,
-                &pwstrs,
-                null_mut(),
+                Some(pwstrs.as_slice()),
+                None,
             )
-        };
-        if !result.as_bool() {
-            return Err(EventLogError::SystemError(io::Error::last_os_error()));
-        }
+        }?;
 
         Ok(())
     }
@@ -91,8 +91,8 @@ impl EventLog {
 impl Drop for EventLog {
     fn drop(&mut self) {
         let result = unsafe { WinEventLog::DeregisterEventSource(self.handle) };
-        if !result.as_bool() {
-            println!("{:?}", io::Error::last_os_error());
+        if let Err(e) = result {
+            println!("{e:?}");
         }
     }
 }

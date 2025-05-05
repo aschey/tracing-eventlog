@@ -1,7 +1,7 @@
 #[cfg(windows)]
 mod tests {
     use std::process::Command;
-    use tracing::{event, info, Level};
+    use tracing::info;
     use tracing_eventlog::EventLogRegistry;
     use tracing_eventlog::{EventLogLayer, LogSource};
     use tracing_subscriber::prelude::*;
@@ -57,9 +57,6 @@ mod tests {
         let out = command.output().unwrap().stdout;
         let out_str = String::from_utf8(out).unwrap();
         let trimmed = out_str.split_whitespace().collect::<Vec<_>>().join(" ");
-        assert_eq!(
-            format!("Information test::tests: log: \"{log_msg}\"..."),
-            trimmed
-        );
+        assert_eq!(format!("test::tests: log: \"{log_msg}\"..."), trimmed);
     }
 }

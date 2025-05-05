@@ -1,4 +1,4 @@
-// Auto-generated from origin with SHA256 22a60cba10c65c9d9493acd0276b2701907e01560114574f6f17dfd8a39e3a76.
+// Auto-generated from origin with SHA256 d61ec31277b308093120d09fba81a271596126021c790952740882a82caf91a2.
 pub(crate) const CATEGORY_COUNT: u32 = 3;
 
 pub const STATUS_SEVERITY_INFORMATIONAL: u32 = 0x1;
@@ -15,10 +15,12 @@ pub const MSG_TRACE: u32 = 0x40000104;
 
 #[allow(unused_variables)]
 pub fn get_category(category: String) -> u16 {
+
     match category.trim().to_lowercase().as_ref() {
         "\"database events\"" => DATABASE_EVENTS_CATEGORY,
         "\"network events\"" => NETWORK_EVENTS_CATEGORY,
         "\"ui events\"" => UI_EVENTS_CATEGORY,
         _ => 0,
     }
+
 }

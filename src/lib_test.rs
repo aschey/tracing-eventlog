@@ -1,5 +1,5 @@
 use super::*;
-use tracing::{info, Level};
+use tracing::{Level, info};
 use tracing_subscriber::layer::SubscriberExt;
 
 #[cfg(windows)]

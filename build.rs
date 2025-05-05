@@ -3,7 +3,7 @@ use sha2::{Digest, Sha256};
 use std::{
     env,
     fs::{self, File},
-    io::{copy, prelude::*, BufRead, BufReader, LineWriter},
+    io::{BufRead, BufReader, LineWriter, copy, prelude::*},
     path::Path,
     process::Command,
     str,

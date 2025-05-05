@@ -6,7 +6,7 @@ use eventlog::EventLog;
 use mockall_double::double;
 use std::io;
 use std::{ffi::OsStr, fmt::Debug, sync::Mutex};
-use tracing::{span, Metadata, Subscriber};
+use tracing::{Metadata, Subscriber, span};
 use tracing_core::{Event, Field};
 use tracing_subscriber::fmt::format::{Compact, DefaultFields, Format, Pretty};
 use tracing_subscriber::fmt::{FormatEvent, FormatFields, Layer, MakeWriter};
