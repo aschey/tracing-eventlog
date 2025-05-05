@@ -57,6 +57,7 @@ mod tests {
         let out = command.output().unwrap().stdout;
         let out_str = String::from_utf8(out).unwrap();
         let trimmed = out_str.split_whitespace().collect::<Vec<_>>().join(" ");
-        assert_eq!(format!("test::tests: log: \"{log_msg}\"..."), trimmed);
+        // Using "ends_with" here because sometimes there's an "Information" prefix but it's not consistent
+        assert!(trimmed.ends_with(&format!("test::tests: log: \"{log_msg}\"...")));
     }
 }

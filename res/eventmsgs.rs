@@ -1,4 +1,4 @@
-// Auto-generated from origin with SHA256 d61ec31277b308093120d09fba81a271596126021c790952740882a82caf91a2.
+// Auto-generated from origin with SHA256 22a60cba10c65c9d9493acd0276b2701907e01560114574f6f17dfd8a39e3a76.
 pub(crate) const CATEGORY_COUNT: u32 = 3;
 
 pub const STATUS_SEVERITY_INFORMATIONAL: u32 = 0x1;
