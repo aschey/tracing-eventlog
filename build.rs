@@ -9,6 +9,8 @@ use std::{
     str,
 };
 
+// Adopted from https://github.com/bbqsrc/eventlog/blob/master/build.rs
+
 // This regex grabs all MC-generated #define statements and for each it
 // captures 3 groups: name, cast, value. The "cast" group is optional.
 // i.e. "#define SOMETHING   ((DWORD)0x1200L)" -> ("SOMETHING", "DWORD", 0x1200)

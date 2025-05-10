@@ -8,7 +8,6 @@ thiserror = "2"
 tracing = "0.1.36"
 tracing-core = "0.1.29"
 tracing-subscriber = { version = "0.3.19", features = ["registry"] }
-utfx = "0.1.0"
 widestring = "1.0.2"
 
 [target.'cfg(windows)'.dependencies]

@@ -30,8 +30,6 @@ pub enum RegistryError {
     KeyError(::windows::core::Error),
     #[error("Error setting registry value: {0}")]
     ValueError(::windows::core::Error),
-    #[error("Invalid string: {0}")]
-    StrConvertError(#[from] utfx::NulError<u16>),
 }
 
 #[cfg(not(windows))]
