@@ -21,6 +21,7 @@ mod tests {
         let log = format!("basic test log {start}");
         info!(log);
         verify_log("Application", "Tracing Application", &start, &log);
+        source.deregister().unwrap();
     }
 
     #[test]
@@ -43,6 +44,7 @@ mod tests {
             &start,
             &log,
         );
+        source.deregister().unwrap();
     }
 
     fn verify_log(log_source: &str, log_name: &str, start_time: &str, log_msg: &str) {

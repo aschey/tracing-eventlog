@@ -25,11 +25,11 @@ pub enum RegistryError {
     #[error("Unable to locate current exe path")]
     InvalidExePath,
     #[error("Permission denied: {0}")]
-    PermissionDenied(#[from] registry::Error),
+    PermissionDenied(::windows::core::Error),
     #[error("Error settings registry key: {0}")]
-    KeyError(#[from] registry::key::Error),
+    KeyError(::windows::core::Error),
     #[error("Error setting registry value: {0}")]
-    ValueError(#[from] registry::value::Error),
+    ValueError(::windows::core::Error),
     #[error("Invalid string: {0}")]
     StrConvertError(#[from] utfx::NulError<u16>),
 }

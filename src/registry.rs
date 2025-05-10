@@ -11,12 +11,15 @@ pub trait EventLogRegistry {
 pub mod platform {
     use super::EventLogRegistry;
     use crate::{error::RegistryError, eventmsgs};
-    use registry::{Data, Hive, RegKey, Security};
-    use windows::Win32::System::EventLog::{
-        EVENTLOG_ERROR_TYPE, EVENTLOG_INFORMATION_TYPE, EVENTLOG_WARNING_TYPE,
+    use windows::Win32::{
+        Foundation::ERROR_ACCESS_DENIED,
+        System::EventLog::{EVENTLOG_ERROR_TYPE, EVENTLOG_INFORMATION_TYPE, EVENTLOG_WARNING_TYPE},
     };
+    use windows_registry::{Key, LOCAL_MACHINE, Value};
 
     const REG_BASEKEY: &str = r"SYSTEM\CurrentControlSet\Services\EventLog";
+
+    const APPLICATION: &str = "Application";
 
     enum SourceType {
         Application,
@@ -31,65 +34,61 @@ pub mod platform {
     impl LogSource {
         fn add_keys(
             &self,
-            app_key: RegKey,
+            app_key: Key,
             exe_path: &str,
         ) -> core::result::Result<(), RegistryError> {
-            let exe_path_value = Data::String(
-                exe_path
-                    .try_into()
-                    .map_err(RegistryError::StrConvertError)?,
-            );
-            set_registry_value(&app_key, "EventMessageFile", &exe_path_value)?;
+            set_registry_value(&app_key, "EventMessageFile", &exe_path.into())?;
 
-            set_registry_value(&app_key, "CategoryMessageFile", &exe_path_value)?;
+            set_registry_value(&app_key, "CategoryMessageFile", &exe_path.into())?;
 
-            set_registry_value(
-                &app_key,
-                "CategoryCount",
-                &Data::U32(eventmsgs::CATEGORY_COUNT),
-            )?;
+            set_registry_value(&app_key, "CategoryCount", &eventmsgs::CATEGORY_COUNT.into())?;
 
             let supported_types =
                 EVENTLOG_ERROR_TYPE.0 | EVENTLOG_WARNING_TYPE.0 | EVENTLOG_INFORMATION_TYPE.0;
-            set_registry_value(
-                &app_key,
-                "TypesSupported",
-                &Data::U32(supported_types as u32),
-            )?;
+            set_registry_value(&app_key, "TypesSupported", &(supported_types as u32).into())?;
 
             Ok(())
         }
     }
 
     fn set_registry_value(
-        key: &RegKey,
+        key: &Key,
         name: &str,
-        data: &Data,
+        data: &Value,
     ) -> core::result::Result<(), RegistryError> {
-        match key.set_value(name, data) {
-            Ok(()) => Ok(()),
-            Err(e) if matches!(e, registry::value::Error::PermissionDenied(_, _)) => {
-                Err(RegistryError::PermissionDenied(registry::Error::Value(e)))
+        key.set_value(name, data).map_err(|e| {
+            if e.code() == ERROR_ACCESS_DENIED.into() {
+                RegistryError::PermissionDenied(e)
+            } else {
+                RegistryError::ValueError(e)
             }
-            Err(e) => Err(RegistryError::ValueError(e)),
+        })
+    }
+
+    fn map_key_error(result: ::windows::core::Error) -> RegistryError {
+        if result.code() == ERROR_ACCESS_DENIED.into() {
+            RegistryError::PermissionDenied(result)
+        } else {
+            RegistryError::KeyError(result)
         }
     }
 
-    fn map_key_error(result: registry::key::Error) -> RegistryError {
-        match result {
-            registry::key::Error::PermissionDenied(_, _) => {
-                RegistryError::PermissionDenied(registry::Error::Key(result))
-            }
-            _ => RegistryError::KeyError(result),
-        }
+    fn read_log_key() -> core::result::Result<Key, RegistryError> {
+        LOCAL_MACHINE
+            .options()
+            .read()
+            .open(REG_BASEKEY)
+            .map_err(map_key_error)
     }
 
-    fn open_app_key(security: Security) -> core::result::Result<RegKey, RegistryError> {
-        let key = Hive::LocalMachine
-            .open(REG_BASEKEY, security)
-            .map_err(map_key_error)?;
-        let app_key = key.open("Application", security).map_err(map_key_error)?;
-        Ok(app_key)
+    fn write_log_key() -> core::result::Result<Key, RegistryError> {
+        LOCAL_MACHINE
+            .options()
+            .read()
+            .write()
+            .create()
+            .open(REG_BASEKEY)
+            .map_err(map_key_error)
     }
 
     impl EventLogRegistry for LogSource {
@@ -119,47 +118,35 @@ pub mod platform {
 
             match &self.source {
                 SourceType::Application => {
-                    let app_key_read = open_app_key(Security::Read)?;
-                    if app_key_read.open(&self.name, Security::Read).is_ok() {
+                    let app_key_read = read_log_key()?.open(APPLICATION).map_err(map_key_error)?;
+                    if app_key_read.open(&self.name).is_ok() {
                         return Ok(());
                     }
 
-                    let app_key = open_app_key(Security::Write)?;
-                    let name_key = app_key
-                        .create(&self.name, Security::Write)
-                        .map_err(map_key_error)?;
+                    let app_key = write_log_key()?.open(APPLICATION).map_err(map_key_error)?;
+                    let name_key = app_key.create(&self.name).map_err(map_key_error)?;
                     self.add_keys(name_key, exe_path)?;
                 }
                 SourceType::Custom(sources) => {
-                    let base_key_read = Hive::LocalMachine
-                        .open(REG_BASEKEY, Security::Read)
-                        .map_err(map_key_error)?;
+                    let base_key_read = read_log_key()?;
                     for source in sources {
-                        if let Ok(custom_key) = base_key_read.open(&self.name, Security::Read) {
-                            if custom_key.open(&self.name, Security::Read).is_ok()
-                                && custom_key.open(source, Security::Read).is_ok()
-                                && custom_key.value("AutoBackupLogFiles").is_ok()
-                                && custom_key.value("MaxSize").is_ok()
+                        if let Ok(custom_key) = base_key_read.open(&self.name) {
+                            if custom_key.open(&self.name).is_ok()
+                                && custom_key.open(source).is_ok()
+                                && custom_key.get_value("AutoBackupLogFiles").is_ok()
+                                && custom_key.get_value("MaxSize").is_ok()
                             {
                                 continue;
                             }
                         }
 
-                        let base_key = Hive::LocalMachine
-                            .open(REG_BASEKEY, Security::Read)
-                            .map_err(map_key_error)?;
-                        let custom_key = base_key
-                            .create(&self.name, Security::Write)
-                            .map_err(map_key_error)?;
-                        set_registry_value(&custom_key, "AutoBackupLogFiles", &Data::U32(0))?;
-                        set_registry_value(&custom_key, "MaxSize", &Data::U32(0x00080000))?;
-                        let name_key = custom_key
-                            .create(&self.name, Security::Write)
-                            .map_err(map_key_error)?;
+                        let base_key = read_log_key()?;
+                        let custom_key = base_key.create(&self.name).map_err(map_key_error)?;
+                        set_registry_value(&custom_key, "AutoBackupLogFiles", &0u32.into())?;
+                        set_registry_value(&custom_key, "MaxSize", &0x00080000u32.into())?;
+                        let name_key = custom_key.create(&self.name).map_err(map_key_error)?;
                         self.add_keys(name_key, exe_path)?;
-                        let source_key = custom_key
-                            .create(source, Security::Write)
-                            .map_err(map_key_error)?;
+                        let source_key = custom_key.create(source).map_err(map_key_error)?;
                         self.add_keys(source_key, exe_path)?;
                     }
                 }
@@ -171,14 +158,12 @@ pub mod platform {
         fn deregister(self) -> core::result::Result<(), RegistryError> {
             match self.source {
                 SourceType::Application => {
-                    let app_key = open_app_key(Security::Write)?;
-                    app_key.delete(self.name, true).map_err(map_key_error)?;
+                    let app_key = write_log_key()?.open(APPLICATION).map_err(map_key_error)?;
+                    app_key.remove_tree(self.name).map_err(map_key_error)?;
                 }
                 SourceType::Custom(_) => {
-                    let base_key = Hive::LocalMachine
-                        .open(REG_BASEKEY, Security::Read)
-                        .map_err(map_key_error)?;
-                    base_key.delete(self.name, true).map_err(map_key_error)?;
+                    let base_key = write_log_key()?;
+                    base_key.remove_tree(self.name).map_err(map_key_error)?;
                 }
             }
             Ok(())
