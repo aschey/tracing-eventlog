@@ -1,9 +1,6 @@
-// Auto-generated from origin with SHA256 22a60cba10c65c9d9493acd0276b2701907e01560114574f6f17dfd8a39e3a76.
+// Auto-generated from origin with SHA256 adfa9dd98f3dcfb637de925547ff87b91a3cdf6a91b916530c491c667a0089ba.
 pub(crate) const CATEGORY_COUNT: u32 = 3;
 
-pub const STATUS_SEVERITY_INFORMATIONAL: u32 = 0x1;
-pub const STATUS_SEVERITY_WARNING: u32 = 0x2;
-pub const STATUS_SEVERITY_ERROR: u32 = 0x3;
 pub const DATABASE_EVENTS_CATEGORY: u16 = 0x00000001;
 pub const NETWORK_EVENTS_CATEGORY: u16 = 0x00000002;
 pub const UI_EVENTS_CATEGORY: u16 = 0x00000003;
