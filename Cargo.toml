@@ -5,14 +5,14 @@ version = "0.1.0"
 
 [dependencies]
 thiserror = "2"
-tracing = "0.1.36"
-tracing-core = "0.1.29"
-tracing-subscriber = { version = "0.3.19", features = ["registry"] }
-widestring = "1.0.2"
+tracing = "0.1"
+tracing-core = "0.1"
+tracing-subscriber = { version = "0.3", features = ["registry"] }
+widestring = "1.2"
 
 [target.'cfg(windows)'.dependencies]
-windows-registry = "0.5.1"
-windows = { version = "0.61", features = [
+windows-registry = "0.6"
+windows = { version = "0.62", features = [
     "Win32_System_EventLog",
     "Win32_Foundation",
     "Win32_Security",
@@ -22,13 +22,13 @@ windows = { version = "0.61", features = [
 embed-resource = "3"
 
 [build-dependencies]
-regex = { version = "1.6.0", features = [
+regex = { version = "1.12", features = [
     "std",
     "unicode-perl",
 ], default-features = false }
-sha2 = "0.10.2"
+sha2 = "0.10.9"
 
 [dev-dependencies]
-chrono = "0.4.41"
-mockall = "0.13.1"
+chrono = "0.4.42"
+mockall = "0.14.0"
 mockall_double = "0.3.1"
